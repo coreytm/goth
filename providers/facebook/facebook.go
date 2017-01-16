@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/golang/glog"
 	"github.com/markbates/goth"
 	"golang.org/x/oauth2"
 )
@@ -93,6 +94,7 @@ func (p *Provider) FetchUser(session goth.Session) (goth.User, error) {
 	var resp *http.Response
 
 	if p.SignRequests {
+		glog.Infof("Making Signed Request for Provider: %s", p.Name)
 		proof, err := p.GetProof(session)
 		if err != nil {
 			return user, err
@@ -111,6 +113,7 @@ func (p *Provider) FetchUser(session goth.Session) (goth.User, error) {
 			return user, err
 		}
 	} else {
+		glog.Infof("Making Un-Signed Request for Provider: %s", p.Name)
 		resp, err := http.Get(endpointProfile + "&access_token=" + url.QueryEscape(sess.AccessToken))
 		if err != nil {
 			if resp != nil {
