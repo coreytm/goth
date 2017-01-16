@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/golang/glog"
 	"github.com/markbates/goth"
 	"golang.org/x/oauth2"
 )
@@ -105,8 +104,6 @@ func (p *Provider) FetchUser(session goth.Session) (goth.User, error) {
 			return user, err
 		}
 
-		glog.Infof("Making a Signed Request to: %s", url)
-
 		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", sess.AccessToken))
 		c := http.DefaultClient
 		resp, err = c.Do(req)
@@ -121,6 +118,10 @@ func (p *Provider) FetchUser(session goth.Session) (goth.User, error) {
 			}
 			return user, err
 		}
+	}
+
+	if resp == nil || resp.StatusCode != http.StatusOK {
+		return user, fmt.Errorf("Failed to get user profile for Provider: %s", p.Name())
 	}
 
 	defer resp.Body.Close()
