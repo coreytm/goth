@@ -111,7 +111,8 @@ func (p *Provider) FetchUser(session goth.Session) (goth.User, error) {
 			return user, err
 		}
 	} else {
-		resp, err := http.Get(endpointProfile + "&access_token=" + url.QueryEscape(sess.AccessToken))
+		var err error
+		resp, err = http.Get(endpointProfile + "&access_token=" + url.QueryEscape(sess.AccessToken))
 		if err != nil {
 			if resp != nil {
 				resp.Body.Close()
