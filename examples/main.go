@@ -8,6 +8,9 @@ import (
 
 	"sort"
 
+	"log"
+	"math"
+
 	"github.com/gorilla/pat"
 	"github.com/gorilla/sessions"
 	"github.com/markbates/goth"
@@ -31,7 +34,9 @@ import (
 	"github.com/markbates/goth/providers/intercom"
 	"github.com/markbates/goth/providers/lastfm"
 	"github.com/markbates/goth/providers/linkedin"
+	"github.com/markbates/goth/providers/meetup"
 	"github.com/markbates/goth/providers/onedrive"
+	"github.com/markbates/goth/providers/openidConnect"
 	"github.com/markbates/goth/providers/paypal"
 	"github.com/markbates/goth/providers/salesforce"
 	"github.com/markbates/goth/providers/slack"
@@ -48,7 +53,16 @@ import (
 )
 
 func init() {
-	gothic.Store = sessions.NewFilesystemStore(os.TempDir(), []byte("goth-example"))
+	store := sessions.NewFilesystemStore(os.TempDir(), []byte("goth-example"))
+
+	// set the maxLength of the cookies stored on the disk to a larger number to prevent issues with:
+	// securecookie: the value is too long
+	// when using OpenID Connect , since this can contain a large amount of extra information in the id_token
+
+	// Note, when using the FilesystemStore only the session.ID is written to a browser cookie, so this is explicit for the storage on disk
+	store.MaxLength(math.MaxInt64)
+
+	gothic.Store = store
 }
 
 func main() {
@@ -93,10 +107,19 @@ func main() {
 		dailymotion.New(os.Getenv("DAILYMOTION_KEY"), os.Getenv("DAILYMOTION_SECRET"), "http://localhost:3000/auth/dailymotion/callback", "email"),
 		deezer.New(os.Getenv("DEEZER_KEY"), os.Getenv("DEEZER_SECRET"), "http://localhost:3000/auth/deezer/callback", "email"),
 		discord.New(os.Getenv("DISCORD_KEY"), os.Getenv("DISCORD_SECRET"), "http://localhost:3000/auth/discord/callback", discord.ScopeIdentify, discord.ScopeEmail),
+		meetup.New(os.Getenv("MEETUP_KEY"), os.Getenv("MEETUP_SECRET"), "http://localhost:3000/auth/meetup/callback"),
 
 		//Auth0 allocates domain per customer, a domain must be provided for auth0 to work
 		auth0.New(os.Getenv("AUTH0_KEY"), os.Getenv("AUTH0_SECRET"), "http://localhost:3000/auth/auth0/callback", os.Getenv("AUTH0_DOMAIN")),
 	)
+
+	// OpenID Connect is based on OpenID Connect Auto Discovery URL (https://openid.net/specs/openid-connect-discovery-1_0-17.html)
+	// because the OpenID Connect provider initialize it self in the New(), it can return an error which should be handled or ignored
+	// ignore the error for now
+	openidConnect, _ := openidConnect.New(os.Getenv("OPENID_CONNECT_KEY"), os.Getenv("OPENID_CONNECT_SECRET"), "http://localhost:3000/auth/openid-connect/callback", os.Getenv("OPENID_CONNECT_DISCOVERY_URL"))
+	if openidConnect != nil {
+		goth.UseProviders(openidConnect)
+	}
 
 	m := make(map[string]string)
 	m["amazon"] = "Amazon"
@@ -131,7 +154,9 @@ func main() {
 	m["twitter"] = "Twitter"
 	m["salesforce"] = "Salesforce"
 	m["slack"] = "Slack"
+	m["meetup"] = "Meetup.com"
 	m["auth0"] = "Auth0"
+	m["openid-connect"] = "OpenID Connect"
 
 	var keys []string
 	for k := range m {
@@ -153,12 +178,27 @@ func main() {
 		t.Execute(res, user)
 	})
 
-	p.Get("/auth/{provider}", gothic.BeginAuthHandler)
+	p.Get("/logout/{provider}", func(res http.ResponseWriter, req *http.Request) {
+		gothic.Logout(res, req)
+		res.Header().Set("Location", "/")
+		res.WriteHeader(http.StatusTemporaryRedirect)
+	})
+
+	p.Get("/auth/{provider}", func(res http.ResponseWriter, req *http.Request) {
+		// try to get the user without re-authenticating
+		if gothUser, err := gothic.CompleteUserAuth(res, req); err == nil {
+			t, _ := template.New("foo").Parse(userTemplate)
+			t.Execute(res, gothUser)
+		} else {
+			gothic.BeginAuthHandler(res, req)
+		}
+	})
+
 	p.Get("/", func(res http.ResponseWriter, req *http.Request) {
 		t, _ := template.New("foo").Parse(indexTemplate)
 		t.Execute(res, providerIndex)
 	})
-	http.ListenAndServe(":3000", p)
+	log.Fatal(http.ListenAndServe(":3000", p))
 }
 
 type ProviderIndex struct {
@@ -171,6 +211,7 @@ var indexTemplate = `{{range $key,$value:=.Providers}}
 {{end}}`
 
 var userTemplate = `
+<p><a href="/logout/{{.Provider}}">logout</a></p>
 <p>Name: {{.Name}} [{{.LastName}}, {{.FirstName}}]</p>
 <p>Email: {{.Email}}</p>
 <p>NickName: {{.NickName}}</p>

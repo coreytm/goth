@@ -1,4 +1,4 @@
-package wepay
+package meetup
 
 import (
 	"encoding/json"
@@ -7,10 +7,9 @@ import (
 	"time"
 
 	"github.com/markbates/goth"
-	"golang.org/x/oauth2"
 )
 
-// Session stores data during the auth process with Wepay.
+// Session stores data during the auth process with meetup.com .
 type Session struct {
 	AuthURL      string
 	AccessToken  string
@@ -20,7 +19,7 @@ type Session struct {
 
 var _ goth.Session = &Session{}
 
-// GetAuthURL will return the URL set by calling the `BeginAuth` function on the Wepay provider.
+// GetAuthURL will return the URL set by calling the `BeginAuth` function on the meetup.com provider.
 func (s Session) GetAuthURL() (string, error) {
 	if s.AuthURL == "" {
 		return "", errors.New(goth.NoAuthUrlErrorMessage)
@@ -28,10 +27,9 @@ func (s Session) GetAuthURL() (string, error) {
 	return s.AuthURL, nil
 }
 
-// Authorize the session with Wepay and return the access token to be stored for future use.
+// Authorize the session with meetup.com and return the access token to be stored for future use.
 func (s *Session) Authorize(provider goth.Provider, params goth.Params) (string, error) {
 	p := provider.(*Provider)
-	oauth2.RegisterBrokenAuthHeaderProvider(tokenURL)
 	token, err := p.config.Exchange(goth.ContextForClient(p.Client()), params.Get("code"))
 	if err != nil {
 		return "", err

@@ -4,11 +4,13 @@ package dropbox
 import (
 	"encoding/json"
 	"errors"
-	"github.com/markbates/goth"
-	"golang.org/x/oauth2"
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/markbates/goth"
+	"golang.org/x/oauth2"
+	"fmt"
 )
 
 const (
@@ -19,10 +21,12 @@ const (
 
 // Provider is the implementation of `goth.Provider` for accessing Dropbox.
 type Provider struct {
-	ClientKey   string
-	Secret      string
-	CallbackURL string
-	config      *oauth2.Config
+	ClientKey    string
+	Secret       string
+	CallbackURL  string
+	HTTPClient   *http.Client
+	config       *oauth2.Config
+	providerName string
 }
 
 // Session stores data during the auth process with Dropbox.
@@ -36,9 +40,10 @@ type Session struct {
 // create one manually.
 func New(clientKey, secret, callbackURL string, scopes ...string) *Provider {
 	p := &Provider{
-		ClientKey:   clientKey,
-		Secret:      secret,
-		CallbackURL: callbackURL,
+		ClientKey:           clientKey,
+		Secret:              secret,
+		CallbackURL:         callbackURL,
+		providerName:        "dropbox",
 	}
 	p.config = newConfig(p, scopes)
 	return p
@@ -46,7 +51,16 @@ func New(clientKey, secret, callbackURL string, scopes ...string) *Provider {
 
 // Name is the name used to retrieve this provider later.
 func (p *Provider) Name() string {
-	return "dropbox"
+	return p.providerName
+}
+
+// SetName is to update the name of the provider (needed in case of multiple providers of 1 type)
+func (p *Provider) SetName(name string) {
+	p.providerName = name
+}
+
+func (p *Provider) Client() *http.Client {
+	return goth.HTTPClientWithFallBack(p.HTTPClient)
 }
 
 // Debug is a no-op for the dropbox package.
@@ -66,16 +80,26 @@ func (p *Provider) FetchUser(session goth.Session) (goth.User, error) {
 		AccessToken: s.Token,
 		Provider:    p.Name(),
 	}
+
+	if user.AccessToken == "" {
+		// data is not yet retrieved since accessToken is still empty
+		return user, fmt.Errorf("%s cannot get user information without accessToken", p.providerName)
+	}
+
 	req, err := http.NewRequest("GET", accountURL, nil)
 	if err != nil {
 		return user, err
 	}
 	req.Header.Set("Authorization", "Bearer "+s.Token)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := p.Client().Do(req)
 	if err != nil {
 		return user, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return user, fmt.Errorf("%s responded with a %d trying to fetch user information", p.providerName, resp.StatusCode)
+	}
 
 	err = userFromReader(resp.Body, &user)
 	return user, err
@@ -99,7 +123,7 @@ func (s *Session) GetAuthURL() (string, error) {
 // Authorize the session with Dropbox and return the access token to be stored for future use.
 func (s *Session) Authorize(provider goth.Provider, params goth.Params) (string, error) {
 	p := provider.(*Provider)
-	token, err := p.config.Exchange(oauth2.NoContext, params.Get("code"))
+	token, err := p.config.Exchange(goth.ContextForClient(p.Client()), params.Get("code"))
 	if err != nil {
 		return "", err
 	}
@@ -137,7 +161,7 @@ func newConfig(p *Provider, scopes []string) *oauth2.Config {
 
 func userFromReader(r io.Reader, user *goth.User) error {
 	u := struct {
-		Name        string `json:"display_name"`
+		Name string `json:"display_name"`
 		NameDetails struct {
 			NickName string `json:"familiar_name"`
 		} `json:"name_details"`

@@ -5,10 +5,12 @@ package auth0
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/markbates/goth"
-	"golang.org/x/oauth2"
 	"io"
 	"net/http"
+
+	"github.com/markbates/goth"
+	"golang.org/x/oauth2"
+	"fmt"
 )
 
 const (
@@ -20,11 +22,13 @@ const (
 
 // Provider is the implementation of `goth.Provider` for accessing Auth0.
 type Provider struct {
-	ClientKey   string
-	Secret      string
-	CallbackURL string
-	Domain      string
-	config      *oauth2.Config
+	ClientKey    string
+	Secret       string
+	CallbackURL  string
+	Domain       string
+	HTTPClient   *http.Client
+	config       *oauth2.Config
+	providerName string
 }
 
 type auth0UserResp struct {
@@ -40,10 +44,11 @@ type auth0UserResp struct {
 // create one manually.
 func New(clientKey, secret, callbackURL string, auth0Domain string, scopes ...string) *Provider {
 	p := &Provider{
-		ClientKey:   clientKey,
-		Secret:      secret,
-		CallbackURL: callbackURL,
-		Domain:      auth0Domain,
+		ClientKey:           clientKey,
+		Secret:              secret,
+		CallbackURL:         callbackURL,
+		Domain:              auth0Domain,
+		providerName:        "auth0",
 	}
 	p.config = newConfig(p, scopes)
 	return p
@@ -51,7 +56,16 @@ func New(clientKey, secret, callbackURL string, auth0Domain string, scopes ...st
 
 // Name is the name used to retrieve this provider later.
 func (p *Provider) Name() string {
-	return "auth0"
+	return p.providerName
+}
+
+// SetName is to update the name of the provider (needed in case of multiple providers of 1 type)
+func (p *Provider) SetName(name string) {
+	p.providerName = name
+}
+
+func (p *Provider) Client() *http.Client {
+	return goth.HTTPClientWithFallBack(p.HTTPClient)
 }
 
 // Debug is a no-op for the auth0 package.
@@ -76,13 +90,19 @@ func (p *Provider) FetchUser(session goth.Session) (goth.User, error) {
 		RefreshToken: s.RefreshToken,
 		ExpiresAt:    s.ExpiresAt,
 	}
+
+	if user.AccessToken == "" {
+		// data is not yet retrieved since accessToken is still empty
+		return user, fmt.Errorf("%s cannot get user information without accessToken", p.providerName)
+	}
+
 	userProfileURL := protocol + p.Domain + endpointProfile
 	req, err := http.NewRequest("GET", userProfileURL, nil)
 	if err != nil {
 		return user, err
 	}
 	req.Header.Set("Authorization", "Bearer "+s.AccessToken)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := p.Client().Do(req)
 	if err != nil {
 		if resp != nil {
 			resp.Body.Close()
@@ -90,6 +110,10 @@ func (p *Provider) FetchUser(session goth.Session) (goth.User, error) {
 		return user, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return user, fmt.Errorf("%s responded with a %d trying to fetch user information", p.providerName, resp.StatusCode)
+	}
 
 	err = userFromReader(resp.Body, &user)
 	return user, err

@@ -37,26 +37,47 @@ var (
 // You should always call `github.New` to get a new Provider. Never try to create
 // one manually.
 func New(clientKey, secret, callbackURL string, scopes ...string) *Provider {
+	return NewCustomisedURL(clientKey, secret, callbackURL, AuthURL, TokenURL, ProfileURL, EmailURL, scopes...)
+}
+
+// NewCustomisedURL is similar to New(...) but can be used to set custom URLs to connect to
+func NewCustomisedURL(clientKey, secret, callbackURL, authURL, tokenURL, profileURL, emailURL string, scopes ...string) *Provider {
 	p := &Provider{
-		ClientKey:   clientKey,
-		Secret:      secret,
-		CallbackURL: callbackURL,
+		ClientKey:    clientKey,
+		Secret:       secret,
+		CallbackURL:  callbackURL,
+		providerName: "github",
+		profileURL:   profileURL,
+		emailURL:     emailURL,
 	}
-	p.config = newConfig(p, scopes)
+	p.config = newConfig(p, authURL, tokenURL, scopes)
 	return p
 }
 
 // Provider is the implementation of `goth.Provider` for accessing Github.
 type Provider struct {
-	ClientKey   string
-	Secret      string
-	CallbackURL string
-	config      *oauth2.Config
+	ClientKey    string
+	Secret       string
+	CallbackURL  string
+	HTTPClient   *http.Client
+	config       *oauth2.Config
+	providerName string
+	profileURL   string
+	emailURL     string
 }
 
 // Name is the name used to retrieve this provider later.
 func (p *Provider) Name() string {
-	return "github"
+	return p.providerName
+}
+
+// SetName is to update the name of the provider (needed in case of multiple providers of 1 type)
+func (p *Provider) SetName(name string) {
+	p.providerName = name
+}
+
+func (p *Provider) Client() *http.Client {
+	return goth.HTTPClientWithFallBack(p.HTTPClient)
 }
 
 // Debug is a no-op for the github package.
@@ -79,7 +100,12 @@ func (p *Provider) FetchUser(session goth.Session) (goth.User, error) {
 		Provider:    p.Name(),
 	}
 
-	response, err := http.Get(ProfileURL + "?access_token=" + url.QueryEscape(sess.AccessToken))
+	if user.AccessToken == "" {
+		// data is not yet retrieved since accessToken is still empty
+		return user, fmt.Errorf("%s cannot get user information without accessToken", p.providerName)
+	}
+
+	response, err := p.Client().Get(p.profileURL + "?access_token=" + url.QueryEscape(sess.AccessToken))
 	if err != nil {
 		return user, err
 	}
@@ -146,7 +172,7 @@ func userFromReader(reader io.Reader, user *goth.User) error {
 }
 
 func getPrivateMail(p *Provider, sess *Session) (email string, err error) {
-	response, err := http.Get(EmailURL + "?access_token=" + url.QueryEscape(sess.AccessToken))
+	response, err := p.Client().Get(p.emailURL + "?access_token=" + url.QueryEscape(sess.AccessToken))
 	if err != nil {
 		if response != nil {
 			response.Body.Close()
@@ -177,14 +203,14 @@ func getPrivateMail(p *Provider, sess *Session) (email string, err error) {
 	return
 }
 
-func newConfig(provider *Provider, scopes []string) *oauth2.Config {
+func newConfig(provider *Provider, authURL, tokenURL string, scopes []string) *oauth2.Config {
 	c := &oauth2.Config{
 		ClientID:     provider.ClientKey,
 		ClientSecret: provider.Secret,
 		RedirectURL:  provider.CallbackURL,
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  AuthURL,
-			TokenURL: TokenURL,
+			AuthURL:  authURL,
+			TokenURL: tokenURL,
 		},
 		Scopes: []string{},
 	}

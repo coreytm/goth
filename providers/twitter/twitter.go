@@ -6,10 +6,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io/ioutil"
+	"net/http"
+
 	"github.com/markbates/goth"
 	"github.com/mrjones/oauth"
 	"golang.org/x/oauth2"
-	"io/ioutil"
+	"fmt"
 )
 
 var (
@@ -27,9 +30,10 @@ var (
 // If you'd like to use authenticate instead of authorize, use NewAuthenticate instead.
 func New(clientKey, secret, callbackURL string) *Provider {
 	p := &Provider{
-		ClientKey:   clientKey,
-		Secret:      secret,
-		CallbackURL: callbackURL,
+		ClientKey:           clientKey,
+		Secret:              secret,
+		CallbackURL:         callbackURL,
+		providerName:        "twitter",
 	}
 	p.consumer = newConsumer(p, authorizeURL)
 	return p
@@ -39,9 +43,10 @@ func New(clientKey, secret, callbackURL string) *Provider {
 // NewAuthenticate uses the authenticate URL instead of the authorize URL.
 func NewAuthenticate(clientKey, secret, callbackURL string) *Provider {
 	p := &Provider{
-		ClientKey:   clientKey,
-		Secret:      secret,
-		CallbackURL: callbackURL,
+		ClientKey:           clientKey,
+		Secret:              secret,
+		CallbackURL:         callbackURL,
+		providerName:        "twitter",
 	}
 	p.consumer = newConsumer(p, authenticateURL)
 	return p
@@ -49,16 +54,27 @@ func NewAuthenticate(clientKey, secret, callbackURL string) *Provider {
 
 // Provider is the implementation of `goth.Provider` for accessing Twitter.
 type Provider struct {
-	ClientKey   string
-	Secret      string
-	CallbackURL string
-	debug       bool
-	consumer    *oauth.Consumer
+	ClientKey    string
+	Secret       string
+	CallbackURL  string
+	HTTPClient   *http.Client
+	debug        bool
+	consumer     *oauth.Consumer
+	providerName string
 }
 
 // Name is the name used to retrieve this provider later.
 func (p *Provider) Name() string {
-	return "twitter"
+	return p.providerName
+}
+
+// SetName is to update the name of the provider (needed in case of multiple providers of 1 type)
+func (p *Provider) SetName(name string) {
+	p.providerName = name
+}
+
+func (p *Provider) Client() *http.Client {
+	return goth.HTTPClientWithFallBack(p.HTTPClient)
 }
 
 // Debug sets the logging of the OAuth client to verbose.
@@ -79,11 +95,16 @@ func (p *Provider) BeginAuth(state string) (goth.Session, error) {
 
 // FetchUser will go to Twitter and access basic information about the user.
 func (p *Provider) FetchUser(session goth.Session) (goth.User, error) {
+	sess := session.(*Session)
 	user := goth.User{
 		Provider: p.Name(),
 	}
 
-	sess := session.(*Session)
+	if sess.AccessToken == nil {
+		// data is not yet retrieved since accessToken is still empty
+		return user, fmt.Errorf("%s cannot get user information without accessToken", p.providerName)
+	}
+
 	response, err := p.consumer.Get(
 		endpointProfile,
 		map[string]string{"include_entities": "false", "skip_status": "true"},
@@ -92,6 +113,10 @@ func (p *Provider) FetchUser(session goth.Session) (goth.User, error) {
 		return user, err
 	}
 	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return user, fmt.Errorf("%s responded with a %d trying to fetch user information", p.providerName, response.StatusCode)
+	}
 
 	bits, err := ioutil.ReadAll(response.Body)
 	err = json.NewDecoder(bytes.NewReader(bits)).Decode(&user.RawData)

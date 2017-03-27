@@ -17,12 +17,14 @@ $ go get github.com/markbates/goth
 ## Supported Providers
 
 * Amazon
+* Auth0
 * Bitbucket
 * Box
 * Cloud Foundry
 * Dailymotion
 * Deezer
 * Digital Ocean
+* Discord
 * Dropbox
 * Facebook
 * Fitbit
@@ -35,7 +37,9 @@ $ go get github.com/markbates/goth
 * Intercom
 * Lastfm
 * Linkedin
+* Meetup
 * OneDrive
+* OpenID Connect (auto discovery)
 * Paypal
 * SalesForce
 * Slack
@@ -54,6 +58,26 @@ $ go get github.com/markbates/goth
 
 See the [examples](examples) folder for a working application that lets users authenticate
 through Twitter, Facebook, Google Plus etc.
+
+To run the example either clone the source from GitHub
+
+```text
+$ git clone git@github.com:markbates/goth.git
+```
+or use
+```text
+$ go get github.com/markbates/goth
+```
+```text
+$ cd goth/examples
+$ go get -v
+$ go build 
+$ ./examples
+```
+
+Now open up your browser and go to [http://localhost:3000](http://localhost:3000) to see the example.
+
+To actually use the different providers, please make sure you configure them given the system environments as defined in the examples/main.go file
 
 ## Issues
 
@@ -76,38 +100,44 @@ Would I love to see more providers? Certainly! Would you love to contribute one?
 * Mark Bates
 * Tyler Bunnell
 * Corey McGrillis
+* willemvd
 * Rakesh Goyal
 * Andy Grunwald
-* Kevin Fitzpatrick
-* Sharad Ganapathy
 * Glenn Walker
+* Kevin Fitzpatrick
 * Ben Tranter
+* Sharad Ganapathy
+* Andrew Chilton
 * sharadgana
-* Geoff Franks
+* Aurorae
 * Craig P Jolicoeur
 * Zac Bergquist
-* Aurorae
-* Rafael Quintela
-* oov
-* Tyler
-* Noah Shibley
-* DenSm
-* Jacob Walker
-* Samy KACIMI
-* Roy
-* dante gray
+* Geoff Franks
 * Raphael Geronimi
+* Noah Shibley
+* lumost
+* oov
+* Felix Lamouroux
+* Rafael Quintela
+* Tyler
+* DenSm
+* Samy KACIMI
+* dante gray
 * Noah
-* Jerome Touffe-Blin
-* Johnny Boursiquot
+* Jacob Walker
+* Marin Martinic
+* Roy
 * Omni Adams
+* Sasa Brankovic
+* dkhamsing
+* Dante Swift
+* Attila Domokos
+* Albin Gilles
+* Syed Zubairuddin
+* Johnny Boursiquot
+* Jerome Touffe-Blin
+* bryanl
 * Masanobu YOSHIOKA
 * Jonathan Hall
 * HaiMing.Yin
-* Albin Gilles
-* Dante Swift
-* Felix Lamouroux
-* Syed Zubairuddin
-* dkhamsing
-* Sasa Brankovic
-* bryanl
+* Sairam Kunala
