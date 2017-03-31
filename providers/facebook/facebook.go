@@ -33,6 +33,7 @@ func New(clientKey, secret, callbackURL string, signRequests bool, scopes ...str
 		Secret:       secret,
 		CallbackURL:  callbackURL,
 		SignRequests: signRequests,
+		providerName: "facebook",
 	}
 	p.config = newConfig(p, scopes)
 	return p
@@ -40,10 +41,11 @@ func New(clientKey, secret, callbackURL string, signRequests bool, scopes ...str
 
 // Provider is the implementation of `goth.Provider` for accessing Facebook.
 type Provider struct {
-	ClientKey   string
-	Secret      string
-	CallbackURL string
-	config      *oauth2.Config
+	ClientKey    string
+	Secret       string
+	CallbackURL  string
+	config       *oauth2.Config
+	providerName string
 
 	// SignedRequests is used to specify whether or not the provider is expecting signed requests
 	SignRequests bool
@@ -52,6 +54,11 @@ type Provider struct {
 // Name is the name used to retrieve this provider later.
 func (p *Provider) Name() string {
 	return "facebook"
+}
+
+// SetName is to update the name of the provider (needed in case of multiple providers of 1 type)
+func (p *Provider) SetName(name string) {
+	p.providerName = name
 }
 
 // Debug is a no-op for the facebook package.
