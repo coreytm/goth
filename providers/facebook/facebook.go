@@ -32,8 +32,8 @@ func New(clientKey, secret, callbackURL string, signRequests bool, scopes ...str
 		ClientKey:    clientKey,
 		Secret:       secret,
 		CallbackURL:  callbackURL,
-		SignRequests: signRequests,
 		providerName: "facebook",
+		SignRequests: signRequests,
 	}
 	p.config = newConfig(p, scopes)
 	return p
@@ -44,6 +44,7 @@ type Provider struct {
 	ClientKey    string
 	Secret       string
 	CallbackURL  string
+	HTTPClient   *http.Client
 	config       *oauth2.Config
 	providerName string
 
@@ -59,6 +60,10 @@ func (p *Provider) Name() string {
 // SetName is to update the name of the provider (needed in case of multiple providers of 1 type)
 func (p *Provider) SetName(name string) {
 	p.providerName = name
+}
+
+func (p *Provider) Client() *http.Client {
+	return goth.HTTPClientWithFallBack(p.HTTPClient)
 }
 
 // Debug is a no-op for the facebook package.
